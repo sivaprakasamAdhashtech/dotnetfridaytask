@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: multitenant-billing-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: MultiTenantBilling
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - multitenant-network
+
+  api:
+    build:
+      context: .
+      dockerfile: src/MultiTenantBilling.Api/Dockerfile
+    container_name: multitenant-billing-api
+    restart: unless-stopped
+    ports:
+      - "5000:8080"
+      - "5001:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080;https://+:8081
+      - MongoDbSettings__ConnectionString=mongodb://admin:password123@mongodb:27017/MultiTenantBilling?authSource=admin
+      - MongoDbSettings__DatabaseName=MultiTenantBilling
+    depends_on:
+      - mongodb
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - multitenant-network
+
+  mongo-express:
+    image: mongo-express:1.0.0
+    container_name: multitenant-billing-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password123@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    depends_on:
+      - mongodb
+    networks:
+      - multitenant-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  multitenant-network:
+    driver: bridge
